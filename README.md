@@ -31,7 +31,7 @@ Each control removes one defence with a `-D` flag, and Tamarin then finds an att
 
 ## Results
 
-All 29 lemmas of the five theories are verified automatically, with no interactive proof step, and all four controls find their attack trace. The longest run (L5) takes about 2.5 minutes. The per-lemma outcomes and step counts are in [`results/SUMMARY.txt`](results/SUMMARY.txt).
+All 29 lemmas of the five theories are verified automatically, with no interactive proof step, and all four controls find their attack trace. On the paper's laptop the whole suite takes about 5 minutes, and the longest run (L5) about 2.2 minutes (see [Timing](#timing)). The per-lemma outcomes and step counts are in [`results/SUMMARY.txt`](results/SUMMARY.txt).
 
 ## Running
 
@@ -48,4 +48,25 @@ To open a single theory in the interactive GUI:
 ```sh
 tamarin-prover interactive L5_Session.spthy
 ```
+
+## Timing
+
+`./hyperfine.sh` times the same nine runs with hyperfine (3 runs each, no warmup) and checks the verdict of every lemma in the last timed run. It needs `hyperfine`, a `tamarin-prover` binary and Maude, either on `PATH` or through nix. It writes into `results/hyperfine/` (or `--out DIR`); of its output only the table [`results/hyperfine/hyperfine.md`](results/hyperfine/hyperfine.md) is committed.
+
+Measured on the laptop the paper reports: Intel Core i9-13900HX (32 threads), 64 GB, Ubuntu 26.04 in WSL 2, Tamarin 1.12.0, Maude 3.5.1, hyperfine 2.0.0.
+
+| Run | Wall time [s], mean ± σ | Peak memory |
+|---|---:|---:|
+| `L123_Network` | 52.6 ± 0.6 | 4.7 GiB |
+| `L123_Network_TWO_BYZANTINE` | 3.3 ± 0.1 | 0.2 GiB |
+| `L4_Transport` | 1.9 ± 0.0 | 0.2 GiB |
+| `L4_Transport_UNBOUND_INPUTS` | 2.3 ± 0.1 | 0.2 GiB |
+| `L5_Session` | 134.3 ± 3.3 | 11.9 GiB |
+| `L6_Presentation` | 52.4 ± 1.4 | 1.4 GiB |
+| `L6_Presentation_SEPARATE_SLOTS` | 6.8 ± 0.1 | 0.4 GiB |
+| `L7_Application` | 5.1 ± 0.2 | 0.3 GiB |
+| `L7_Application_NO_CAS` | 46.8 ± 1.6 | 2.4 GiB |
+| **Full suite** | **≈ 5 min** | |
+
+The times match the single runs in `results/SUMMARY.txt`, and every lemma gives the same verdict and step count as there.
 

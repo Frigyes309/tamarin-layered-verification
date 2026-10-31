@@ -1,2 +1,5 @@
 # Full proofs written by run_all.sh
 results/*.proof.spthy
+# hyperfine.sh output: only the Markdown table is committed
+results/hyperfine/*
+!results/hyperfine/hyperfine.md
