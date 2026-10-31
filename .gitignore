@@ -3,3 +3,15 @@ results/*.proof.spthy
 # hyperfine.sh output: only the Markdown table is committed
 results/hyperfine/*
 !results/hyperfine/hyperfine.md
+
+# Reproduction output
+out/
+
+# Secrets never enter the repository; commit an .env.example with placeholders instead.
+.env
+.env.*
+!.env.example
+wallets*
+*.pem
+*.key
+.claude/settings.local.json

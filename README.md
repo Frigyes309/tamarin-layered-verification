@@ -1,4 +1,12 @@
+---
+role: code
+description: Authoritative Tamarin models and results for Ferenc Smuk's TDK 2026 paper.
+repository: https://github.com/Frigyes309/tamarin-layered-verification
+---
+
 # Layered verification in Tamarin
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.TODO.svg)](https://doi.org/10.5281/zenodo.TODO)
 
 Tamarin models for the paper **Bottom-Up Formal Verification of Temporal Constraints in Self-Orchestrated Business Processes** (Ferenc Smuk, BME VIK TDK 2026; advisors: Martin Farkas, Dr. Imre Kocsis).
 
@@ -49,6 +57,24 @@ To open a single theory in the interactive GUI:
 tamarin-prover interactive L5_Session.spthy
 ```
 
+## Reproduce and check
+
+Build the runtime image locally, then reproduce all five theories and four negative controls:
+
+```sh
+docker build -t tamarin-layered-verification .
+mkdir -p out
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" tamarin-layered-verification reproduce
+```
+
+The image includes Tamarin 1.12.0, Maude 3.5.1 and `just`. It writes proofs and summaries to `out/` and checks every lemma verdict and proof size against the committed `results/`, ignoring wall-clock times. Missing summaries or different verdicts or step counts fail the check. The committed models and results are never overwritten by these recipes.
+
+Add `--smoke` after `reproduce` to run the five short cases used in CI. With the dependencies on `PATH`, `just reproduce` runs the full suite locally and `just check` repeats its comparison. `just tab-correctness` selects the five layer theories and the `NO_CAS` control; `just tab-robustness` selects all four negative controls. `just timing` invokes the existing hyperfine script and needs its additional dependencies. The devcontainer builds the same Dockerfile.
+
+`run_all.sh [RUN...]` accepts run names from its table. `TAMARIN` defaults to `tamarin-prover` on `PATH`, `TIMEOUT` to 1800 seconds, and `OUT` to `results/` when invoked directly or `out/` through `just`.
+
+Publishing a GitHub release triggers the container workflow, which publishes `ghcr.io/frigyes309/tamarin-layered-verification:<release-tag>`. Until a release image is available, use the local build above. `.zenodo.json` supplies archive metadata, but Zenodo integration and DOI assignment are separate publication steps.
+
 ## Timing
 
 `./hyperfine.sh` times the same nine runs with hyperfine (3 runs each, no warmup) and checks the verdict of every lemma in the last timed run. It needs `hyperfine`, a `tamarin-prover` binary and Maude, either on `PATH` or through nix. It writes into `results/hyperfine/` (or `--out DIR`); of its output only the table [`results/hyperfine/hyperfine.md`](results/hyperfine/hyperfine.md) is committed.
@@ -70,3 +96,32 @@ Measured on the laptop the paper reports: Intel Core i9-13900HX (32 threads), 64
 
 The times match the single runs in `results/SUMMARY.txt`, and every lemma gives the same verdict and step count as there.
 
+## What does not reproduce
+
+The lemma verdicts and proof step counts reproduce exactly: `just check` compares them with [`results/`](results/) and fails on any difference.
+
+Wall-clock times do not, because they depend on the machine and on the Tamarin and Maude builds, so `just check` ignores them. The times in the paper (48, 2, 141, 63 and 6 s for the five theories) are the single runs in [`results/SUMMARY.txt`](results/SUMMARY.txt), which does not record the Tamarin version or the machine. The hyperfine means under [Timing](#timing), on the paper's laptop with Tamarin 1.12.0 and Maude 3.5.1, are 52.6, 1.9, 134.3, 52.4 and 5.1 s. Expect different times on other hardware.
+
+## Results tag
+
+The verdicts, step counts and times in the paper are the committed [`results/`](results/) of tag `v1.0.0`, Zenodo version TODO. Later versions change the packaging, never the results.
+
+## Cite
+
+Citation metadata is in [`CITATION.cff`](CITATION.cff). As BibTeX, with the concept DOI:
+
+```bibtex
+@software{smuk2026tamarin,
+  author    = {Smuk, Ferenc},
+  title     = {Tamarin theories and results for: Bottom-Up Formal Verification Of Temporal Constraints In Self-Orchestrated Business Processes},
+  year      = {2026},
+  version   = {v1.0.0},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.TODO},
+  url       = {https://github.com/Frigyes309/tamarin-layered-verification}
+}
+```
+
+## License
+
+MIT, see [`LICENSE`](LICENSE).
