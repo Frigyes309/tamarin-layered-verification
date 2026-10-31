@@ -96,6 +96,12 @@ Measured on the laptop the paper reports: Intel Core i9-13900HX (32 threads), 64
 
 The times match the single runs in `results/SUMMARY.txt`, and every lemma gives the same verdict and step count as there.
 
+## What does not reproduce
+
+The lemma verdicts and proof step counts reproduce exactly: `just check` compares them with [`results/`](results/) and fails on any difference.
+
+Wall-clock times do not, because they depend on the machine and on the Tamarin and Maude builds, so `just check` ignores them. The times in the paper (48, 2, 141, 63 and 6 s for the five theories) are the single runs in [`results/SUMMARY.txt`](results/SUMMARY.txt), which does not record the Tamarin version or the machine. The hyperfine means under [Timing](#timing), on the paper's laptop with Tamarin 1.12.0 and Maude 3.5.1, are 52.6, 1.9, 134.3, 52.4 and 5.1 s. Expect different times on other hardware.
+
 ## Results tag
 
 The verdicts, step counts and times in the paper are the committed [`results/`](results/) of tag `v1.0.0`, Zenodo version TODO. Later versions change the packaging, never the results.
