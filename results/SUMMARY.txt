@@ -1,0 +1,53 @@
+== L123_Network (all lemmas verified)
+  qc_executable (exists-trace): verified (11 steps)
+  tx_authenticity (all-traces): verified (6 steps)
+  vote_origin (all-traces): verified (884 steps)
+  qc_authenticity (all-traces): verified (8 steps)
+  no_conflicting_qc (all-traces): verified (7566 steps)
+  wall-clock time: 48 s
+== L123_Network_TWO_BYZANTINE (attack trace found)
+  conflicting_qc_attack (exists-trace): verified (28 steps)
+  wall-clock time: 4 s
+== L4_Transport (all lemmas verified)
+  global_sync_executable (exists-trace): verified (14 steps)
+  invalid_tx_no_valid_zkp (all-traces): verified (6 steps)
+  global_sync_only_certified (all-traces): verified (6 steps)
+  invalid_bls_no_transition (all-traces): verified (19 steps)
+  wall-clock time: 2 s
+== L4_Transport_UNBOUND_INPUTS (lemma falsified)
+  invalid_tx_no_valid_zkp (all-traces): falsified - found trace (14 steps)
+  wall-clock time: 2 s
+== L5_Session (all lemmas verified)
+  anchoring_executable (exists-trace): verified (14 steps)
+  beacon_unpredictable (all-traces): verified (10 steps)
+  ledger_beacon_monotone (all-traces): verified (1423 steps)
+  ledger_max_monotone (all-traces): verified (3306 steps)
+  no_forward_dating (all-traces): verified (96 steps)
+  no_backdating (all-traces): verified (136 steps)
+  bounded_claim_window (all-traces): verified (32 steps)
+  delta_rule_enforced (all-traces): verified (150 steps)
+  lamport_matrix_monotone (all-traces): verified (141 steps)
+  wall-clock time: 141 s
+== L6_Presentation (all lemmas verified)
+  message_branch_executable (exists-trace): verified (14 steps)
+  timer_branch_executable (exists-trace): verified (9 steps)
+  admissible_only (all-traces): verified (20 steps)
+  gateway_exclusivity (all-traces): verified (4399 steps)
+  no_fallback_via_event_gate (all-traces): verified (228 steps)
+  timer_respects_deadline (all-traces): verified (22 steps)
+  message_before_deadline (all-traces): verified (303 steps)
+  wall-clock time: 63 s
+== L6_Presentation_SEPARATE_SLOTS (lemmas falsified)
+  gateway_exclusivity (all-traces): falsified - found trace (15 steps)
+  no_fallback_via_event_gate (all-traces): falsified - found trace (14 steps)
+  wall-clock time: 9 s
+== L7_Application (all lemmas verified)
+  chain_extension_executable (exists-trace): verified (11 steps)
+  no_state_bifurcation (all-traces): verified (8 steps)
+  no_double_existence (all-traces): verified (8 steps)
+  history_integrity (all-traces): verified (17 steps)
+  wall-clock time: 6 s
+== L7_Application_NO_CAS (lemmas falsified)
+  no_state_bifurcation (all-traces): falsified - found trace (16 steps)
+  no_double_existence (all-traces): falsified - found trace (16 steps)
+  wall-clock time: 51 s

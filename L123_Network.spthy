@@ -1,0 +1,158 @@
+theory L123_Network
+begin
+
+/*
+ * Layers 1-3: Physical & Data link and Network.
+ *
+ * Scope:   one sector with n = 4 infrastructure nodes, f = 1, quorum q = 3.
+ * Attacker: Dolev-Yao network adversary plus at most f corrupted nodes.
+ *
+ * Layer 1-2 (Node -> Elected Node link): a participant submits a signed
+ * transaction to the Elected Node of its sector over the untrusted network.
+ * Layer 3 (Elected Node <-> Elected Node): HotStuff votes are signed and
+ * aggregated into a quorum certificate (QC). The threshold BLS aggregate is
+ * abstracted as the set of q individual signatures it combines.
+ */
+
+builtins: signing
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+// Infrastructure node with a long-term key share
+rule Register_Node:
+    [ Fr(~sk) ]
+  --[ NodeKey($N), OnlyOnce(<'node', $N>) ]->
+    [ !NodeLtk($N, ~sk), !NodePk($N, pk(~sk)), Out(pk(~sk)) ]
+
+// Participant (BPMN pool) with a DID-bound key pair
+rule Register_Participant:
+    [ Fr(~sk) ]
+  --[ OnlyOnce(<'participant', $P>) ]->
+    [ !PartLtk($P, ~sk), !PartPk($P, pk(~sk)), Out(pk(~sk)) ]
+
+// Byzantine infrastructure node: the adversary obtains its key share
+rule Corrupt_Node:
+    [ !NodeLtk($N, sk) ]
+  --[ Corrupt($N) ]->
+    [ Out(sk) ]
+
+// Strategically dishonest participant
+rule Corrupt_Participant:
+    [ !PartLtk($P, sk) ]
+  --[ CorruptP($P) ]->
+    [ Out(sk) ]
+
+// ---------------------------------------------------------------------------
+// Layer 1-2: Node -> Elected Node link
+// ---------------------------------------------------------------------------
+
+rule Participant_Submit:
+    [ !PartLtk($P, sk), Fr(~tx) ]
+  --[ Submitted($P, ~tx) ]->
+    [ Out(<'tx', $P, ~tx, sign(<'tx', $P, ~tx>, sk)>) ]
+
+rule ElectedNode_Receive:
+    [ In(<'tx', P, tx, s>), !PartPk(P, pkP) ]
+  --[ Eq(verify(s, <'tx', P, tx>, pkP), true), ReceivedTx($E, P, tx) ]->
+    [ ]
+
+// ---------------------------------------------------------------------------
+// Layer 3: HotStuff voting among the nodes of the sector
+// ---------------------------------------------------------------------------
+
+// An honest node votes for at most one block per view (see restriction)
+rule Node_Vote:
+    [ !NodeLtk($N, sk), In(<'propose', v, b>) ]
+  --[ Voted($N, v, b) ]->
+    [ Out(<'vote', $N, v, b, sign(<'vote', v, b>, sk)>) ]
+
+// Any party (in particular the next leader) accepts a QC that carries
+// q = 3 valid votes of distinct nodes for the same view and block
+rule Accept_QC:
+    [ In(<'qc', v, b, N1, s1, N2, s2, N3, s3>),
+      !NodePk(N1, pk1), !NodePk(N2, pk2), !NodePk(N3, pk3) ]
+  --[ Neq(N1, N2), Neq(N1, N3), Neq(N2, N3),
+      Eq(verify(s1, <'vote', v, b>, pk1), true),
+      Eq(verify(s2, <'vote', v, b>, pk2), true),
+      Eq(verify(s3, <'vote', v, b>, pk3), true),
+      VoteChecked(N1, v, b), VoteChecked(N2, v, b), VoteChecked(N3, v, b),
+      AcceptQC(v, b, N1, N2, N3) ]->
+    [ ]
+
+// ---------------------------------------------------------------------------
+// Restrictions
+// ---------------------------------------------------------------------------
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction Inequality:
+  "All x #i. Neq(x, x) @ #i ==> F"
+
+restriction OnlyOnce:
+  "All x #i #j. OnlyOnce(x) @ #i & OnlyOnce(x) @ #j ==> #i = #j"
+
+// The sector has exactly the four nodes N1..N4 (n = 4)
+restriction Sector_Membership:
+  "All N #i. NodeKey(N) @ #i ==> N = 'N1' | N = 'N2' | N = 'N3' | N = 'N4'"
+
+// At most f = 1 Byzantine node per sector (assumption A2).
+// Negative control: with -D=TWO_BYZANTINE two nodes may be corrupted,
+// which violates n >= 3f + 1, and no_conflicting_qc must be falsified.
+#ifdef TWO_BYZANTINE
+restriction Byzantine_Threshold:
+  "All A B C #i #j #k. Corrupt(A) @ #i & Corrupt(B) @ #j & Corrupt(C) @ #k ==>
+      A = B | A = C | B = C"
+#else
+restriction Byzantine_Threshold:
+  "All A B #i #j. Corrupt(A) @ #i & Corrupt(B) @ #j ==> A = B"
+#endif
+
+// Honest HotStuff behaviour: one vote per node and view
+restriction Single_Vote:
+  "All N v b1 b2 #i #j. Voted(N, v, b1) @ #i & Voted(N, v, b2) @ #j ==> b1 = b2"
+
+// ---------------------------------------------------------------------------
+// Lemmas
+// ---------------------------------------------------------------------------
+
+// Sanity: an honest QC can be formed
+lemma qc_executable:
+  exists-trace
+  "Ex v b A B C #i. AcceptQC(v, b, A, B, C) @ #i & not (Ex N #k. Corrupt(N) @ #k)"
+
+// Layer 1-2: a transaction accepted from an honest participant was submitted
+// by that participant (no forgery, no injection by the network adversary)
+lemma tx_authenticity:
+  "All E P tx #i. ReceivedTx(E, P, tx) @ #i ==>
+      (Ex #j. Submitted(P, tx) @ #j & #j < #i) | (Ex #k. CorruptP(P) @ #k)"
+
+// Helper: a vote signature of an uncorrupted node stems from its own vote
+lemma vote_origin [reuse]:
+  "All N v b #i. VoteChecked(N, v, b) @ #i ==>
+      (Ex #j. Voted(N, v, b) @ #j & #j < #i) | (Ex #k. Corrupt(N) @ #k)"
+
+// Layer 3: every accepted QC contains the vote of an honest node
+lemma qc_authenticity:
+  "All v b A B C #i. AcceptQC(v, b, A, B, C) @ #i ==>
+      (Ex N #j. Voted(N, v, b) @ #j & #j < #i & not (Ex #k. Corrupt(N) @ #k))"
+
+#ifdef TWO_BYZANTINE
+// Negative control: with two corrupted nodes the quorums {N1,N2,N3} and
+// {N1,N2,N4} intersect only in Byzantine nodes, so a conflicting QC exists
+lemma conflicting_qc_attack:
+  exists-trace
+  "Ex v b1 b2 #i #j.
+      AcceptQC(v, b1, 'N1', 'N2', 'N3') @ #i &
+      AcceptQC(v, b2, 'N1', 'N2', 'N4') @ #j & not (b1 = b2)"
+#endif
+
+// Layer 3: two conflicting QCs for the same view cannot both be accepted
+// (quorum intersection 2q - n = 2 > f)
+lemma no_conflicting_qc:
+  "All v b1 b2 A1 B1 C1 A2 B2 C2 #i #j.
+      AcceptQC(v, b1, A1, B1, C1) @ #i & AcceptQC(v, b2, A2, B2, C2) @ #j ==> b1 = b2"
+
+end

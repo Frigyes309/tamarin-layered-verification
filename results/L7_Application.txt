@@ -1,0 +1,5 @@
+  chain_extension_executable (exists-trace): verified (11 steps)
+  no_state_bifurcation (all-traces): verified (8 steps)
+  no_double_existence (all-traces): verified (8 steps)
+  history_integrity (all-traces): verified (17 steps)
+  wall-clock time: 6 s

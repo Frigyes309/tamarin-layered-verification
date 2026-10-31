@@ -1,0 +1,176 @@
+theory L6_Presentation
+begin
+
+/*
+ * Layer 6: Presentation (BPMN model as a finite state machine).
+ *
+ * Process: the webshop collaboration of the system model. After the order
+ * is created, a parallel split starts the warehouse notification and the
+ * event-based gateway (EBG). The EBG races three alternatives
+ *   'message' (payment details updated), 'timer' (one hour), 'signal'
+ *   (payment cancelled).
+ * The parallel split is part of the model on purpose. It creates two
+ * legitimate tokens, which is exactly the situation that the fallback attack
+ * tries to exploit (Section 1.3.5 of the system model).
+ *
+ * Attacker: strategically dishonest participant that may request arbitrary
+ * transitions in arbitrary order, on top of the Dolev-Yao network.
+ *
+ * Imported from layer 5 (as model assumptions):
+ *  - no_forward_dating. The timer alternative can fire only after the
+ *    deadline beacon kD has been published (Deadline action).
+ *  - no_backdating. The message and signal alternatives can take effect
+ *    only while the ledger is still before kD.
+ *  - The ledger is single and ordered (layer 4), so the deadline event
+ *    happens exactly once per instance.
+ *
+ * Successor slots (next_location of the credential chain): one slot per
+ * outgoing branch of a parallel split, one shared slot for all alternatives
+ * of an exclusive or event-based gateway.
+ */
+
+builtins: hashing
+
+// ---------------------------------------------------------------------------
+// BPMN model as FSM edges (admissible transitions)
+// ---------------------------------------------------------------------------
+
+rule Model_Edges:
+    [ ]
+  --[ OnlyOnce('model'),
+      EdgeDef('Start', 'OrderCreated'),
+      EdgeDef('OrderCreated', 'Split'),
+      EdgeDef('Split', 'NotifyWarehouse'),
+      EdgeDef('Split', 'EBG'),
+      EdgeDef('EBG', 'message'), EdgeDef('EBG', 'timer'), EdgeDef('EBG', 'signal') ]->
+    [ !Edge('Start', 'OrderCreated'),
+      !Edge('OrderCreated', 'Split'),
+      !Edge('Split', 'NotifyWarehouse'),
+      !Edge('Split', 'EBG'),
+      !Edge('EBG', 'message'), !Edge('EBG', 'timer'), !Edge('EBG', 'signal'),
+      !Gateway('EBG') ]
+
+// ---------------------------------------------------------------------------
+// Process instances
+// ---------------------------------------------------------------------------
+
+rule Instance_Start:
+    [ Fr(~inst) ]
+  --[ Start(~inst) ]->
+    [ Token(~inst, 'Start'), Phase(~inst, 'beforeDeadline'), Out(~inst) ]
+
+// Sequence flow. The dishonest participant chooses which step to request.
+rule Step_Sequence:
+    [ Token(inst, from), !Edge(from, to), In(<'step', inst, from, to>) ]
+  --[ Transition(inst, from, to), NotSplit(from), NotGateway(from) ]->
+    [ Token(inst, to) ]
+
+// Parallel split: one successor slot per outgoing branch
+rule Step_Parallel_Split:
+    [ Token(inst, 'Split'), !Edge('Split', 'NotifyWarehouse'), !Edge('Split', 'EBG') ]
+  --[ Transition(inst, 'Split', 'NotifyWarehouse'),
+      Transition(inst, 'Split', 'EBG'), ParallelSplit(inst) ]->
+    [ Token(inst, 'NotifyWarehouse'), Token(inst, 'EBG') ]
+
+// The deadline beacon kD of the instance is published on the home registry
+rule Deadline_Beacon:
+    [ Phase(inst, 'beforeDeadline') ]
+  --[ Deadline(inst) ]->
+    [ Phase(inst, 'afterDeadline') ]
+
+// Event-based gateway. All alternatives compete for the same successor
+// slot, which is the single EBG token (shared next_location).
+#ifdef SEPARATE_SLOTS
+// Negative control: every alternative gets its own slot, as if the EBG
+// alternatives lay on parallel traces. Fallback using event gates succeeds.
+rule EBG_Arm_Separate:
+    [ Token(inst, 'EBG') ]
+  --[ ArmSeparate(inst) ]->
+    [ AltSlot(inst, 'message'), AltSlot(inst, 'timer'), AltSlot(inst, 'signal') ]
+
+rule EBG_Message:
+    [ AltSlot(inst, 'message'), Phase(inst, 'beforeDeadline'),
+      In(<'step', inst, 'EBG', 'message'>) ]
+  --[ Takes(inst, 'message'), Transition(inst, 'EBG', 'message') ]->
+    [ Phase(inst, 'beforeDeadline'), Token(inst, 'message') ]
+
+rule EBG_Signal:
+    [ AltSlot(inst, 'signal'), Phase(inst, 'beforeDeadline'),
+      In(<'step', inst, 'EBG', 'signal'>) ]
+  --[ Takes(inst, 'signal'), Transition(inst, 'EBG', 'signal') ]->
+    [ Phase(inst, 'beforeDeadline'), Token(inst, 'signal') ]
+
+rule EBG_Timer:
+    [ AltSlot(inst, 'timer'), Phase(inst, 'afterDeadline') ]
+  --[ Takes(inst, 'timer'), Transition(inst, 'EBG', 'timer') ]->
+    [ Phase(inst, 'afterDeadline'), Token(inst, 'timer') ]
+#else
+rule EBG_Message:
+    [ Token(inst, 'EBG'), Phase(inst, 'beforeDeadline'), !Edge('EBG', 'message'),
+      In(<'step', inst, 'EBG', 'message'>) ]
+  --[ Takes(inst, 'message'), Transition(inst, 'EBG', 'message') ]->
+    [ Phase(inst, 'beforeDeadline'), Token(inst, 'message') ]
+
+rule EBG_Signal:
+    [ Token(inst, 'EBG'), Phase(inst, 'beforeDeadline'), !Edge('EBG', 'signal'),
+      In(<'step', inst, 'EBG', 'signal'>) ]
+  --[ Takes(inst, 'signal'), Transition(inst, 'EBG', 'signal') ]->
+    [ Phase(inst, 'beforeDeadline'), Token(inst, 'signal') ]
+
+rule EBG_Timer:
+    [ Token(inst, 'EBG'), Phase(inst, 'afterDeadline'), !Edge('EBG', 'timer') ]
+  --[ Takes(inst, 'timer'), Transition(inst, 'EBG', 'timer') ]->
+    [ Phase(inst, 'afterDeadline'), Token(inst, 'timer') ]
+#endif
+
+// ---------------------------------------------------------------------------
+// Restrictions
+// ---------------------------------------------------------------------------
+
+restriction OnlyOnce:
+  "All x #i #j. OnlyOnce(x) @ #i & OnlyOnce(x) @ #j ==> #i = #j"
+
+// Splits and gateways have their own dedicated rules
+restriction Sequence_Only:
+  "All x #i. NotSplit(x) @ #i ==> not (x = 'Split')"
+
+restriction Sequence_Not_Gateway:
+  "All x #i. NotGateway(x) @ #i ==> not (x = 'EBG')"
+
+// ---------------------------------------------------------------------------
+// Lemmas
+// ---------------------------------------------------------------------------
+
+lemma message_branch_executable:
+  exists-trace
+  "Ex inst #i #j. Takes(inst, 'message') @ #i & ParallelSplit(inst) @ #j"
+
+lemma timer_branch_executable:
+  exists-trace
+  "Ex inst #i. Takes(inst, 'timer') @ #i"
+
+// Only transitions of the BPMN model can take effect
+lemma admissible_only:
+  "All inst from to #i. Transition(inst, from, to) @ #i ==>
+      Ex #j. EdgeDef(from, to) @ #j"
+
+// R2 (safety): of the alternatives of the EBG exactly one takes effect,
+// even though the instance holds two parallel tokens after the split
+lemma gateway_exclusivity:
+  "All inst a1 a2 #i #j. Takes(inst, a1) @ #i & Takes(inst, a2) @ #j ==>
+      a1 = a2 & #i = #j"
+
+// Fallback using event gates: the participant cannot keep the payment and
+// the timeout branch alive at the same time
+lemma no_fallback_via_event_gate:
+  "not (Ex inst #i #j. Takes(inst, 'message') @ #i & Takes(inst, 'timer') @ #j)"
+
+// Timer semantics bound to the beacon-based deadline (from layer 5)
+lemma timer_respects_deadline:
+  "All inst #i. Takes(inst, 'timer') @ #i ==>
+      Ex #d. Deadline(inst) @ #d & #d < #i"
+
+lemma message_before_deadline:
+  "All inst #i #d. Takes(inst, 'message') @ #i & Deadline(inst) @ #d ==> #i < #d"
+
+end

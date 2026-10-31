@@ -1,0 +1,3 @@
+  no_state_bifurcation (all-traces): falsified - found trace (16 steps)
+  no_double_existence (all-traces): falsified - found trace (16 steps)
+  wall-clock time: 51 s

@@ -1,0 +1,10 @@
+  anchoring_executable (exists-trace): verified (14 steps)
+  beacon_unpredictable (all-traces): verified (10 steps)
+  ledger_beacon_monotone (all-traces): verified (1423 steps)
+  ledger_max_monotone (all-traces): verified (3306 steps)
+  no_forward_dating (all-traces): verified (96 steps)
+  no_backdating (all-traces): verified (136 steps)
+  bounded_claim_window (all-traces): verified (32 steps)
+  delta_rule_enforced (all-traces): verified (150 steps)
+  lamport_matrix_monotone (all-traces): verified (141 steps)
+  wall-clock time: 141 s

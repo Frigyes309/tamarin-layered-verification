@@ -1,0 +1,171 @@
+theory L7_Application
+begin
+
+/*
+ * Layer 7: Application (atomic verifiable credential chain).
+ *
+ * Every BPMN step is documented by a credential
+ *   vc = <issuer, holder, state, H(vc_prev), loc, next>
+ * signed by its issuer. The credential is written into the VDR slot loc
+ * that its predecessor named as next location. A write is an atomic
+ * compare-and-set (CAS). It succeeds only on an empty slot (assumption A4).
+ *
+ * Attacker: a strategically dishonest participant (it may hold the current
+ * credential and its key is known to the adversary), on top of the
+ * Dolev-Yao network. Its goal is state bifurcation (split brain): two honest
+ * peers accept two different credentials for the same step.
+ *
+ * Imported from the layers below (as model assumptions):
+ *  - Layer 6. Only admissible transitions are issued (the state field is
+ *    taken from the FSM edges). Event-gateway alternatives share one slot.
+ *  - Layer 5. A credential takes effect only when it is anchored, i.e.
+ *    when its CAS write is on the ledger. The temporal checks are done.
+ *  - Layers 3-4. The VDR is a single ordered ledger. A slot read returns
+ *    the committed content, the same for every honest reader.
+ *
+ * Negative control: -D=NO_CAS replaces the atomic CAS by a separate check
+ * followed by a write (time-of-check to time-of-use, TOCTOU). This is the
+ * vulnerability reported by Farkas and Kocsis for non-atomic revocation,
+ * and Tamarin finds the split-brain trace.
+ */
+
+builtins: signing, hashing
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+rule Register_Participant:
+    [ Fr(~sk) ]
+  --[ OnlyOnce(<'participant', $P>) ]->
+    [ !Ltk($P, ~sk), !Pk($P, pk(~sk)), Out(pk(~sk)) ]
+
+rule Corrupt_Participant:
+    [ !Ltk($P, sk) ]
+  --[ Corrupt($P) ]->
+    [ Out(sk) ]
+
+// The FSM of the process (layer 6), reduced to the gateway relevant here
+rule Model_Edges:
+    [ ]
+  --[ OnlyOnce('model') ]->
+    [ !Edge('OrderCreated', 'message'), !Edge('OrderCreated', 'timer'),
+      !Edge('OrderCreated', 'signal') ]
+
+// ---------------------------------------------------------------------------
+// Chain initialisation: the first credential is issued by an honest party
+// ---------------------------------------------------------------------------
+
+rule Chain_Init:
+    [ !Ltk($I, sk), Fr(~loc), Fr(~next) ]
+  --[ ChainInit(~loc), CAS(~loc), Issued($I, <$I, $H, 'OrderCreated', 'genesis', ~loc, ~next>),
+      Written(~loc, <$I, $H, 'OrderCreated', 'genesis', ~loc, ~next>) ]->
+    [ !Slot(~loc, <$I, $H, 'OrderCreated', 'genesis', ~loc, ~next>,
+            sign(<$I, $H, 'OrderCreated', 'genesis', ~loc, ~next>, sk)),
+      SlotEmpty(~next),
+      Out(<<$I, $H, 'OrderCreated', 'genesis', ~loc, ~next>,
+           sign(<$I, $H, 'OrderCreated', 'genesis', ~loc, ~next>, sk)>) ]
+
+// ---------------------------------------------------------------------------
+// Chain extension
+// ---------------------------------------------------------------------------
+
+// An honest holder of the current credential issues the successor for an
+// admissible transition and requests the write into the named slot
+rule Issue_Next_Honest:
+    [ !Slot(loc, <I, H, st, ph, loc, next>, s), !Ltk(H, skH),
+      !Edge(st, st2), Fr(~next2), Fr(~req) ]
+  --[ Issued(H, <H, $H2, st2, h(<I, H, st, ph, loc, next>), next, ~next2>) ]->
+    [ Out(<<H, $H2, st2, h(<I, H, st, ph, loc, next>), next, ~next2>,
+           sign(<H, $H2, st2, h(<I, H, st, ph, loc, next>), next, ~next2>, skH)>) ]
+
+#ifdef NO_CAS
+// TOCTOU variant: the VDR checks that the slot is empty ...
+rule VDR_Check:
+    [ !SlotFree(loc), In(<<I, H, st, ph, loc, next>, s>), !Pk(I, pkI) ]
+  --[ Eq(verify(s, <I, H, st, ph, loc, next>, pkI), true) ]->
+    [ Checked(loc, <I, H, st, ph, loc, next>, s) ]
+
+// ... and writes later, without re-checking (no atomicity)
+rule VDR_Write:
+    [ Checked(loc, <I, H, st, ph, loc, next>, s),
+      !Slot(ploc, <I0, I, st0, ph0, ploc, loc>, ps) ]
+  --[ Eq(ph, h(<I0, I, st0, ph0, ploc, loc>)),
+      Written(loc, <I, H, st, ph, loc, next>) ]->
+    [ !Slot(loc, <I, H, st, ph, loc, next>, s), !SlotFree(next) ]
+
+rule Free_Initial:
+    [ SlotEmpty(loc) ]
+  -->
+    [ !SlotFree(loc) ]
+#else
+// Atomic compare-and-set: the empty-slot token is consumed by the write
+rule VDR_CAS_Write:
+    [ SlotEmpty(loc), In(<<I, H, st, ph, loc, next>, s>), !Pk(I, pkI),
+      !Slot(ploc, <I0, I, st0, ph0, ploc, loc>, ps) ]
+  --[ Eq(verify(s, <I, H, st, ph, loc, next>, pkI), true),
+      Eq(ph, h(<I0, I, st0, ph0, ploc, loc>)),
+      CAS(loc), Written(loc, <I, H, st, ph, loc, next>) ]->
+    [ !Slot(loc, <I, H, st, ph, loc, next>, s), SlotEmpty(next) ]
+#endif
+
+// An honest peer resolves a slot and accepts its credential after checking
+// the issuer signature and the hash link to the predecessor
+rule Peer_Accept:
+    [ !Slot(loc, <I, H, st, ph, loc, next>, s), !Pk(I, pkI) ]
+  --[ Eq(verify(s, <I, H, st, ph, loc, next>, pkI), true),
+      Accepted($Peer, loc, <I, H, st, ph, loc, next>),
+      AcceptedState($Peer, loc, H, st) ]->
+    [ ]
+
+// ---------------------------------------------------------------------------
+// Restrictions
+// ---------------------------------------------------------------------------
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction OnlyOnce:
+  "All x #i #j. OnlyOnce(x) @ #i & OnlyOnce(x) @ #j ==> #i = #j"
+
+// Assumption A4: of all CAS operations on the same slot at most one
+// succeeds. A slot that is already occupied (including the genesis slot)
+// can never be written again, even if a dishonest issuer names it as the
+// next location of its credential.
+restriction Single_Allocation:
+  "All loc #i #j. CAS(loc) @ #i & CAS(loc) @ #j ==> #i = #j"
+
+// ---------------------------------------------------------------------------
+// Lemmas
+// ---------------------------------------------------------------------------
+
+lemma chain_extension_executable:
+  exists-trace
+  "Ex loc vc p #i #j. Written(loc, vc) @ #i & Accepted(p, loc, vc) @ #j &
+      not (Ex init #k. ChainInit(init) @ #k & init = loc) &
+      not (Ex A #c. Corrupt(A) @ #c)"
+
+// No state bifurcation (split brain): two honest peers never accept two
+// different credentials for the same slot
+lemma no_state_bifurcation:
+  "All p q loc vc1 vc2 #i #j.
+      Accepted(p, loc, vc1) @ #i & Accepted(q, loc, vc2) @ #j ==> vc1 = vc2"
+
+// No double existence: the same holder is never bound to two different
+// states of the same step
+lemma no_double_existence:
+  "All p q loc H st1 st2 #i #j.
+      AcceptedState(p, loc, H, st1) @ #i & AcceptedState(q, loc, H, st2) @ #j
+      ==> st1 = st2"
+
+// History integrity and non-repudiation (R3): every accepted credential was
+// issued by its issuer, unless that issuer is dishonest, and it was written
+// on the VDR before it was accepted
+lemma history_integrity:
+  "All p loc I H st ph next #i.
+      Accepted(p, loc, <I, H, st, ph, loc, next>) @ #i ==>
+        (Ex #w. Written(loc, <I, H, st, ph, loc, next>) @ #w & #w < #i) &
+        ((Ex #k. Issued(I, <I, H, st, ph, loc, next>) @ #k & #k < #i) |
+         (Ex #c. Corrupt(I) @ #c))"
+
+end

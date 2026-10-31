@@ -1,0 +1,158 @@
+theory L4_Transport
+begin
+
+/*
+ * Layer 4: Transport (Local VDR -> Elected Node -> Global VDR).
+ *
+ * Attacker: coalition of a dishonest participant and the Byzantine Elected
+ * Node of the sector, on top of the Dolev-Yao network. The Elected Node is
+ * not modelled as an honest role at all. Everything it may do is done by
+ * the adversary, who may forward, drop, reorder or fabricate transactions,
+ * folded proofs and roots.
+ *
+ * Imported from layers 1-3 (as model assumptions):
+ *  - qc_authenticity and no_conflicting_qc. A quorum certificate over a
+ *    transaction or a root exists only if an honest node checked it. The
+ *    threshold BLS group key of the sector is never known to a coalition of
+ *    at most f nodes (assumption A3). The QC is therefore modelled as a
+ *    signature under the sector key, issued only by the honest quorum rules.
+ *  - tx_authenticity. Transactions carry the signature of their issuer.
+ *
+ * Abstractions:
+ *  - Validity of a BPMN-level transition is decided by the honest nodes. A
+ *    transaction is valid if it was produced by an honest participant run
+ *    (!ValidTx) or signed by a corrupted participant AND admissible. The
+ *    adversary may submit arbitrary terms, which honest nodes reject.
+ *  - The folding proof is a constructor zkfold(old, tx, qc) whose verification
+ *    succeeds only on a QC-certified step (soundness of folding, A1).
+ *  - One transaction per aggregation interval keeps the state space small.
+ */
+
+builtins: signing, hashing
+
+functions: zkfold/3, zkcheck/4
+
+// A folded step verifies against the sector key only if its QC is genuine
+equations:
+  zkcheck(zkfold(old, tx, sign(h(tx), sk)), old, tx, pk(sk)) = true
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+// Sector with its threshold group key (PMK published on the Global VDR)
+rule Sector_Setup:
+    [ Fr(~skS), Fr(~genesis) ]
+  --[ SectorSetup($S), OnlyOnce(<'sector', $S>) ]->
+    [ !SectorKey($S, ~skS), !PMK($S, pk(~skS)), Out(pk(~skS)),
+      LocalHead($S, ~genesis), GlobalHead($S, ~genesis), Out(~genesis) ]
+
+rule Register_Participant:
+    [ Fr(~sk) ]
+  --[ OnlyOnce(<'participant', $P>) ]->
+    [ !PartLtk($P, ~sk), !PartPk($P, pk(~sk)), Out(pk(~sk)) ]
+
+rule Corrupt_Participant:
+    [ !PartLtk($P, sk) ]
+  --[ CorruptP($P) ]->
+    [ Out(sk) ]
+
+// ---------------------------------------------------------------------------
+// Participants
+// ---------------------------------------------------------------------------
+
+// Honest participant issues a valid, admissible transaction
+rule Participant_Issue_Valid:
+    [ !PartLtk($P, sk), Fr(~id) ]
+  --[ ValidTx(<$P, ~id, 'admissible'>) ]->
+    [ Out(<<$P, ~id, 'admissible'>, sign(<$P, ~id, 'admissible'>, sk)>) ]
+
+// ---------------------------------------------------------------------------
+// Honest quorum of the sector (at least q - f honest nodes per QC)
+// ---------------------------------------------------------------------------
+
+// Honest nodes certify a transaction only if it is signed by its issuer
+// and it is an admissible BPMN step (the third component)
+rule Quorum_Certify_Tx:
+    [ In(<<P, id, 'admissible'>, sg>), !PartPk(P, pkP), !SectorKey(S, skS) ]
+  --[ Eq(verify(sg, <P, id, 'admissible'>, pkP), true),
+      CertifiedTx(S, <P, id, 'admissible'>) ]->
+    [ Out(sign(h(<P, id, 'admissible'>), skS)) ]
+
+// Honest nodes check the folded proof proposed by the Elected Node and the
+// completeness of its public inputs, then sign the new Local VDR root.
+// Negative control: with -D=UNBOUND_INPUTS the nodes verify the proof but do
+// not check that its public input is the proposed transaction, and the lemma
+// invalid_tx_no_valid_zkp is falsified.
+#ifdef UNBOUND_INPUTS
+rule Quorum_Sign_Root:
+    [ LocalHead(S, old), In(<'propose', old, tx, prf, x>),
+      !SectorKey(S, skS) ]
+  --[ Eq(zkcheck(prf, old, x, pk(skS)), true),
+      LocalStep(S, old, h(<old, tx>), tx) ]->
+    [ LocalHead(S, h(<old, tx>)),
+      Out(<old, h(<old, tx>), prf, sign(<'root', old, h(<old, tx>)>, skS)>) ]
+#else
+rule Quorum_Sign_Root:
+    [ LocalHead(S, old), In(<'propose', old, tx, prf>),
+      !SectorKey(S, skS) ]
+  --[ Eq(zkcheck(prf, old, tx, pk(skS)), true),
+      LocalStep(S, old, h(<old, tx>), tx) ]->
+    [ LocalHead(S, h(<old, tx>)),
+      Out(<old, h(<old, tx>), prf, sign(<'root', old, h(<old, tx>)>, skS)>) ]
+#endif
+
+// ---------------------------------------------------------------------------
+// Global VDR (Elected Nodes of the other sectors, honest by assumption A6)
+// ---------------------------------------------------------------------------
+
+rule GlobalVDR_Accept:
+    [ GlobalHead(S, old), In(<old, new, prf, qc>), In(tx), !PMK(S, pkS) ]
+  --[ Eq(verify(qc, <'root', old, new>, pkS), true),
+      Eq(zkcheck(prf, old, tx, pkS), true),
+      Eq(new, h(<old, tx>)),
+      GlobalSync(S, old, new, tx) ]->
+    [ GlobalHead(S, new) ]
+
+// ---------------------------------------------------------------------------
+// Restrictions
+// ---------------------------------------------------------------------------
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction OnlyOnce:
+  "All x #i #j. OnlyOnce(x) @ #i & OnlyOnce(x) @ #j ==> #i = #j"
+
+// ---------------------------------------------------------------------------
+// Lemmas
+// ---------------------------------------------------------------------------
+
+// Sanity: an honest transaction can travel to the Global VDR
+lemma global_sync_executable:
+  exists-trace
+  "Ex S old new tx #i. GlobalSync(S, old, new, tx) @ #i &
+      not (Ex P #k. CorruptP(P) @ #k)"
+
+// Test 1 (ZKP soundness): a folded proof that verifies covers a certified
+// transaction, so an invalid local transaction yields no valid proof
+lemma invalid_tx_no_valid_zkp:
+  "All S old new tx #i. LocalStep(S, old, new, tx) @ #i ==>
+      Ex #j. CertifiedTx(S, tx) @ #j & #j < #i"
+
+// Test 2 (Local -> Global synchronisation): the Global VDR adopts only
+// roots that the sector quorum signed after checking the folded proof
+lemma global_sync_only_certified:
+  "All S old new tx #i. GlobalSync(S, old, new, tx) @ #i ==>
+      (Ex #j. LocalStep(S, old, new, tx) @ #j & #j < #i)"
+
+// Test 3 (no transition without valid BLS): every globally synchronised
+// transaction was issued by its participant or by a corrupted participant
+// that still had to produce an admissible, signed step
+lemma invalid_bls_no_transition:
+  "All S old new tx #i. GlobalSync(S, old, new, tx) @ #i ==>
+      (Ex #j. CertifiedTx(S, tx) @ #j & #j < #i) &
+      ((Ex #k. ValidTx(tx) @ #k & #k < #i) |
+       (Ex P id #k. tx = <P, id, 'admissible'> & CorruptP(P) @ #k))"
+
+end

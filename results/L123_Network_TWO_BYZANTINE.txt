@@ -1,0 +1,2 @@
+  conflicting_qc_attack (exists-trace): verified (28 steps)
+  wall-clock time: 4 s

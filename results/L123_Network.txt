@@ -1,0 +1,6 @@
+  qc_executable (exists-trace): verified (11 steps)
+  tx_authenticity (all-traces): verified (6 steps)
+  vote_origin (all-traces): verified (884 steps)
+  qc_authenticity (all-traces): verified (8 steps)
+  no_conflicting_qc (all-traces): verified (7566 steps)
+  wall-clock time: 48 s

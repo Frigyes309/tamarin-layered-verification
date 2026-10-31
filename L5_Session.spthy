@@ -1,0 +1,209 @@
+theory L5_Session
+begin
+
+/*
+ * Layer 5: Session (augmented hybrid logical clock, beacons, Lamport matrix).
+ *
+ * Attacker: time adversary. A dishonest participant (or a coalition with
+ * at most f infrastructure nodes) may claim arbitrary timestamps, embed any
+ * beacon it knows, and choose when to submit its credentials.
+ *
+ * Imported from layer 4 (as model assumptions):
+ *  - The Local VDR is a single, totally ordered ledger (no_conflicting_qc,
+ *    global_sync_only_certified). It is modelled by one linear Ledger fact.
+ *  - The threshold group key of the sector is never known to the adversary
+ *    (A3). A beacon is the group signature over its index, so the adversary
+ *    cannot compute it before the honest nodes release their shares.
+ *
+ * Time encoding: relative time is measured in beacon intervals. The ledger
+ * state Ledger(S, r, k, m) holds the round r, the index k of the latest
+ * beacon and the largest claimed timestamp m anchored so far. A metric
+ * deadline "D = T0 + 1h" is mapped outside the prover to a beacon index kD.
+ * All temporal statements below are therefore ordering statements.
+ */
+
+builtins: signing, natural-numbers
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+rule Sector_Setup:
+    [ Fr(~sid), Fr(~skS) ]
+  --[ OnlyOnce('sector'), Sector(~sid),
+      BeaconPub(~sid, %1, sign(<'beacon', %1>, ~skS)),
+      LedgerAt(~sid, %1, %1, %1) ]->
+    [ !SectorKey(~sid, ~skS), !PMK(~sid, pk(~skS)), Out(pk(~skS)), Out(~sid),
+      Ledger(~sid, %1, %1, %1), !Beacon(~sid, %1, sign(<'beacon', %1>, ~skS)),
+      Out(<%1, sign(<'beacon', %1>, ~skS)>) ]
+
+rule Register_Participant:
+    [ Fr(~sk) ]
+  --[ OnlyOnce(<'participant', $P>) ]->
+    [ !PartLtk($P, ~sk), !PartPk($P, pk(~sk)), Out(pk(~sk)) ]
+
+rule Corrupt_Participant:
+    [ !PartLtk($P, sk) ]
+  --[ CorruptP($P) ]->
+    [ Out(sk) ]
+
+// ---------------------------------------------------------------------------
+// Verifiable Epistemic Beacons (pacing by honest nodes)
+// ---------------------------------------------------------------------------
+
+// The honest nodes release their shares for index k+1 only after their
+// clocks show the end of interval k, so beacons appear strictly in order
+rule Publish_Beacon:
+    [ Ledger(S, %r, %k, %m), !SectorKey(S, skS) ]
+  --[ BeaconPub(S, %k %+ %1, sign(<'beacon', %k %+ %1>, skS)),
+      LedgerAt(S, %r %+ %1, %k %+ %1, %m) ]->
+    [ Ledger(S, %r %+ %1, %k %+ %1, %m),
+      !Beacon(S, %k %+ %1, sign(<'beacon', %k %+ %1>, skS)),
+      Out(<%k %+ %1, sign(<'beacon', %k %+ %1>, skS)>) ]
+
+// ---------------------------------------------------------------------------
+// Credentials with hybrid logical clock values
+// ---------------------------------------------------------------------------
+
+// An honest issuer reads the latest beacon it sees on the Local VDR, embeds
+// it and claims its index as the relative timestamp. The vc carries the
+// hybrid logical clock value hlc = (kb, beacon, t).
+rule Issue_Honest:
+    [ !PartLtk($P, sk), Fr(~id), !Beacon(S, %kb, b) ]
+  --[ Issued($P, <$P, ~id, %kb, b, %kb>) ]->
+    [ Out(<<$P, ~id, %kb, b, %kb>, sign(<$P, ~id, %kb, b, %kb>, sk)>) ]
+
+// ---------------------------------------------------------------------------
+// Anchoring on the Local VDR (Invariant I2 and the delta-rule, delta = 1)
+// ---------------------------------------------------------------------------
+
+// The Local VDR first validates the credential (issuer signature, genuine
+// beacon) and then commits it in the next ledger round. Validation is kept
+// in its own rule so that the ordering arguments below do not depend on
+// the cryptographic ones.
+rule Validate_Credential:
+    [ In(<<P, id, %kb, b, %t>, sg>), !PMK(S, pkS), !PartPk(P, pkP) ]
+  --[ Eq(verify(sg, <P, id, %kb, b, %t>, pkP), true),
+      Eq(verify(b, <'beacon', %kb>, pkS), true),
+      Validated(S, <P, id, %kb, b, %t>, %kb) ]->
+    [ Valid(S, <P, id, %kb, b, %t>, %kb, %t) ]
+
+// delta-rule with respect to the largest timestamp m anchored so far
+// (delta = 1). The claimed timestamp raises the maximum seen so far.
+rule Anchor_Raise:
+    [ Ledger(S, %r, %kc, %m), Valid(S, vc, %kb, %t) ]
+  --[ Fresh(%kb, %kc), Leq(%kb, %t), Leq(%t, %kc), Leq(%m, %t),
+      Effective(S, vc, %t, %kc, %kb),
+      LedgerAt(S, %r %+ %1, %kc, %t) ]->
+    [ Ledger(S, %r %+ %1, %kc, %t) ]
+
+// The claimed timestamp is below the maximum, but within the tolerance
+rule Anchor_Keep:
+    [ Ledger(S, %r, %kc, %m), Valid(S, vc, %kb, %t) ]
+  --[ Fresh(%kb, %kc), Leq(%kb, %t), Leq(%t, %kc), Less(%t, %m), Leq(%m, %t %+ %1),
+      Effective(S, vc, %t, %kc, %kb),
+      LedgerAt(S, %r %+ %1, %kc, %m) ]->
+    [ Ledger(S, %r %+ %1, %kc, %m) ]
+
+// ---------------------------------------------------------------------------
+// Lamport matrix on the Global VDR (two sectors, vector clock per update)
+// ---------------------------------------------------------------------------
+
+rule Global_Init:
+    [ Fr(~g) ]
+  --[ OnlyOnce('global'), GVecAt(~g, %1, %1) ]->
+    [ GVec(~g, %1, %1) ]
+
+rule Global_Update_S1:
+    [ GVec(g, %c1, %c2) ]
+  --[ GUpdate('S1', %c1 %+ %1, %c2), GVecAt(g, %c1 %+ %1, %c2) ]->
+    [ GVec(g, %c1 %+ %1, %c2) ]
+
+rule Global_Update_S2:
+    [ GVec(g, %c1, %c2) ]
+  --[ GUpdate('S2', %c1, %c2 %+ %1), GVecAt(g, %c1, %c2 %+ %1) ]->
+    [ GVec(g, %c1, %c2 %+ %1) ]
+
+// ---------------------------------------------------------------------------
+// Restrictions
+// ---------------------------------------------------------------------------
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+restriction OnlyOnce:
+  "All x #i #j. OnlyOnce(x) @ #i & OnlyOnce(x) @ #j ==> #i = #j"
+
+restriction LessEqual:
+  "All %a %b #i. Leq(%a, %b) @ #i ==> (%a = %b | %a << %b)"
+
+restriction Less:
+  "All %a %b #i. Less(%a, %b) @ #i ==> %a << %b"
+
+// Invariant I2: the embedded beacon is the current or the previous one
+restriction BeaconFreshness:
+  "All %kb %kc #i. Fresh(%kb, %kc) @ #i ==> (%kb = %kc | %kb %+ %1 = %kc)"
+
+// ---------------------------------------------------------------------------
+// Lemmas
+// ---------------------------------------------------------------------------
+
+lemma anchoring_executable:
+  exists-trace
+  "Ex S vc %t %kc %kb #i. Effective(S, vc, %t, %kc, %kb) @ #i &
+      not (Ex P #k. CorruptP(P) @ #k)"
+
+// Invariant I1: a beacon is unknown to the adversary before it is published
+lemma beacon_unpredictable [reuse]:
+  "All S %k b #i #j. BeaconPub(S, %k, b) @ #i & K(b) @ #j ==>
+      Ex #p. BeaconPub(S, %k, b) @ #p & #p < #j"
+
+// The ledger's beacon index never decreases (helper for the bounds below)
+lemma ledger_beacon_monotone [reuse, use_induction, heuristic=S, hide_lemma=beacon_unpredictable]:
+  "All S %r1 %r2 %k1 %k2 %m1 %m2 #i #j.
+      LedgerAt(S, %r1, %k1, %m1) @ #i & LedgerAt(S, %r2, %k2, %m2) @ #j & #i < #j
+      ==> (%k1 = %k2 | %k1 << %k2)"
+
+// The largest anchored timestamp never decreases (helper for the delta-rule)
+lemma ledger_max_monotone [reuse, use_induction, heuristic=S, hide_lemma=beacon_unpredictable,
+                           hide_lemma=ledger_beacon_monotone]:
+  "All S %r1 %r2 %k1 %k2 %m1 %m2 #i #j.
+      LedgerAt(S, %r1, %k1, %m1) @ #i & LedgerAt(S, %r2, %k2, %m2) @ #j & #i < #j
+      ==> (%m1 = %m2 | %m1 << %m2)"
+
+// Lower bound (not-before, no forward-dating of creation): an effective
+// credential embeds a beacon that was published before it took effect, and
+// nobody knew that beacon before its publication
+lemma no_forward_dating [hide_lemma=ledger_beacon_monotone, hide_lemma=ledger_max_monotone]:
+  "All S vc %t %kc %kb #i. Effective(S, vc, %t, %kc, %kb) @ #i ==>
+      (Ex b #j. BeaconPub(S, %kb, b) @ #j & #j < #i)"
+
+// Upper bound (not-after, no backdating): an event that takes effect while
+// the ledger is at beacon index kc < kD is anchored before beacon kD exists,
+// and its claimed time lies at most one interval before kc
+lemma no_backdating [hide_lemma=ledger_max_monotone]:
+  "All S vc %t %kc %kb %kD b #i #d.
+      Effective(S, vc, %t, %kc, %kb) @ #i & BeaconPub(S, %kD, b) @ #d & %kc << %kD
+      ==> #i < #d"
+
+// The claimed timestamp never exceeds the ledger's current beacon index and
+// lies at most one interval below it (R1 window of two beacon intervals)
+lemma bounded_claim_window [hide_lemma=ledger_beacon_monotone, hide_lemma=ledger_max_monotone]:
+  "All S vc %t %kc %kb #i. Effective(S, vc, %t, %kc, %kb) @ #i ==>
+      %t = %kc | %t %+ %1 = %kc"
+
+// delta-rule: in anchoring order a later entry never claims a time more
+// than delta = 1 interval before an earlier one
+lemma delta_rule_enforced [hide_lemma=ledger_beacon_monotone]:
+  "All S vc1 vc2 %t1 %t2 %kc1 %kc2 %kb1 %kb2 #i #j.
+      Effective(S, vc1, %t1, %kc1, %kb1) @ #i & Effective(S, vc2, %t2, %kc2, %kb2) @ #j
+      & #i < #j ==> (%t1 = %t2 | %t1 << %t2 | %t1 = %t2 %+ %1)"
+
+// Lamport matrix: every row (vector) on the Global VDR dominates the earlier
+// ones, so a sector can never roll back what it or others have seen
+lemma lamport_matrix_monotone [use_induction]:
+  "All g %a1 %a2 %b1 %b2 #i #j.
+      GVecAt(g, %a1, %a2) @ #i & GVecAt(g, %b1, %b2) @ #j & #i < #j
+      ==> (%a1 = %b1 | %a1 << %b1) & (%a2 = %b2 | %a2 << %b2)"
+
+end

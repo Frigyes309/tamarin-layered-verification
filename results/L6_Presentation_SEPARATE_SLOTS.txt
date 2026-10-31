@@ -1,0 +1,3 @@
+  gateway_exclusivity (all-traces): falsified - found trace (15 steps)
+  no_fallback_via_event_gate (all-traces): falsified - found trace (14 steps)
+  wall-clock time: 9 s

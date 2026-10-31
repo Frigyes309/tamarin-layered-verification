@@ -1,0 +1,8 @@
+  message_branch_executable (exists-trace): verified (14 steps)
+  timer_branch_executable (exists-trace): verified (9 steps)
+  admissible_only (all-traces): verified (20 steps)
+  gateway_exclusivity (all-traces): verified (4399 steps)
+  no_fallback_via_event_gate (all-traces): verified (228 steps)
+  timer_respects_deadline (all-traces): verified (22 steps)
+  message_before_deadline (all-traces): verified (303 steps)
+  wall-clock time: 63 s

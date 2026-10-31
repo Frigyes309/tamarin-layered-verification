@@ -1,0 +1,5 @@
+  global_sync_executable (exists-trace): verified (14 steps)
+  invalid_tx_no_valid_zkp (all-traces): verified (6 steps)
+  global_sync_only_certified (all-traces): verified (6 steps)
+  invalid_bls_no_transition (all-traces): verified (19 steps)
+  wall-clock time: 2 s
