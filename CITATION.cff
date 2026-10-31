@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+title: "Tamarin theories and results for: Bottom-Up Formal Verification Of Temporal Constraints In Self-Orchestrated Business Processes"
+message: "If you use this artifact, cite this repository and the paper."
+type: software
+authors:
+  - family-names: Smuk
+    given-names: Ferenc
+    affiliation: Budapest University of Technology and Economics
+license: MIT
+repository-code: https://github.com/Frigyes309/tamarin-layered-verification
+keywords:
+  - Tamarin prover
+  - formal verification
+  - BPMN
+  - self-orchestration
+  - Byzantine fault tolerance
+  - temporal constraints

@@ -1,3 +1,9 @@
+---
+role: code
+description: Authoritative Tamarin models and results for Ferenc Smuk's TDK 2026 paper.
+repository: https://github.com/Frigyes309/tamarin-layered-verification
+---
+
 # Layered verification in Tamarin
 
 Tamarin models for the paper **Bottom-Up Formal Verification of Temporal Constraints in Self-Orchestrated Business Processes** (Ferenc Smuk, BME VIK TDK 2026; advisors: Martin Farkas, Dr. Imre Kocsis).
@@ -48,6 +54,28 @@ To open a single theory in the interactive GUI:
 ```sh
 tamarin-prover interactive L5_Session.spthy
 ```
+
+## Reproduce and check
+
+Build the runtime image locally, then reproduce all five theories and four negative controls:
+
+```sh
+docker build -t tamarin-layered-verification .
+mkdir -p out
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" tamarin-layered-verification reproduce
+```
+
+The image includes Tamarin 1.12.0, Maude 3.5.1 and `just`. It writes proofs and summaries to `out/` and checks every lemma verdict and proof size against the committed `results/`, ignoring wall-clock times. Missing summaries or different verdicts or step counts fail the check. The committed models and results are never overwritten by these recipes.
+
+Add `--smoke` after `reproduce` to run the five short cases used in CI. With the dependencies on `PATH`, `just reproduce` runs the full suite locally and `just check` repeats its comparison. `just tab-correctness` selects the five layer theories and the `NO_CAS` control; `just tab-robustness` selects all four negative controls. `just timing` invokes the existing hyperfine script and needs its additional dependencies. The devcontainer builds the same Dockerfile.
+
+`run_all.sh [RUN...]` accepts run names from its table. `TAMARIN` defaults to `tamarin-prover` on `PATH`, `TIMEOUT` to 1800 seconds, and `OUT` to `results/` when invoked directly or `out/` through `just`.
+
+Publishing a GitHub release triggers the container workflow, which publishes `ghcr.io/frigyes309/tamarin-layered-verification:<release-tag>`. Until a release image is available, use the local build above. `.zenodo.json` supplies archive metadata, but Zenodo integration and DOI assignment are separate publication steps.
+
+## Citation and license
+
+Citation metadata is in [`CITATION.cff`](CITATION.cff). The code is licensed under MIT; see [`LICENSE`](LICENSE).
 
 ## Timing
 

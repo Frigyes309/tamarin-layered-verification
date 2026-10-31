@@ -1,0 +1,5 @@
+.git
+out
+results/*.proof.spthy
+results/hyperfine/logs
+results/hyperfine/proofs

@@ -1,0 +1,6 @@
+{
+  "name": "tamarin-layered-verification",
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+  "overrideCommand": true,
+  "containerEnv": { "OUT": "out" }
+}

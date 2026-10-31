@@ -1,0 +1,20 @@
+# On every push and PR: build the runtime image and run the smoke reproduction
+# in it, so the README's commands and the verdict check keep working.
+name: ci
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the runtime image
+        run: docker build -t tlv .
+      - name: Test reproduction failure handling
+        run: docker run --rm --entrypoint bash tlv scripts/test-reproduction.sh
+      - name: Reproduce (smoke) and check the verdicts
+        run: |
+          mkdir -p out
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" tlv reproduce --smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: out-smoke, path: out/ }
