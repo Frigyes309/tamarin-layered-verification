@@ -61,3 +61,8 @@ check *runs:
 # Time the nine runs with hyperfine (needs hyperfine and Maude on PATH or through nix; see hyperfine.sh).
 timing *args:
     bash hyperfine.sh {{args}}
+
+# What must not reach a public repository: private links, local paths, paper sources, agent
+# commit identities and agent files in the archive. Pass --strict before the repository goes public.
+hygiene *flags:
+    python3 scripts/hygiene.py {{flags}}

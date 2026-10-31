@@ -6,3 +6,12 @@ results/hyperfine/*
 
 # Reproduction output
 out/
+
+# Secrets never enter the repository; commit an .env.example with placeholders instead.
+.env
+.env.*
+!.env.example
+wallets*
+*.pem
+*.key
+.claude/settings.local.json
