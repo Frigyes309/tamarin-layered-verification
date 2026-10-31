@@ -6,6 +6,8 @@ repository: https://github.com/Frigyes309/tamarin-layered-verification
 
 # Layered verification in Tamarin
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.TODO.svg)](https://doi.org/10.5281/zenodo.TODO)
+
 Tamarin models for the paper **Bottom-Up Formal Verification of Temporal Constraints in Self-Orchestrated Business Processes** (Ferenc Smuk, BME VIK TDK 2026; advisors: Martin Farkas, Dr. Imre Kocsis).
 
 The paper verifies self-orchestrated BPMN collaborations, where no trusted orchestrator exists, against a combined Dolev–Yao and Byzantine coalition adversary. Instead of one large model, it splits the system into an OSI-style stack and gives each layer its own Tamarin theory. The lemmas proven on one layer become the assumptions of the layer above, which keeps each state space small. Metric deadlines are encoded as logical ordering facts over threshold-signed Verifiable Epistemic Beacons, so the untimed prover can show that no malicious party can backdate or forward-date a process event.
@@ -73,10 +75,6 @@ Add `--smoke` after `reproduce` to run the five short cases used in CI. With the
 
 Publishing a GitHub release triggers the container workflow, which publishes `ghcr.io/frigyes309/tamarin-layered-verification:<release-tag>`. Until a release image is available, use the local build above. `.zenodo.json` supplies archive metadata, but Zenodo integration and DOI assignment are separate publication steps.
 
-## Citation and license
-
-Citation metadata is in [`CITATION.cff`](CITATION.cff). The code is licensed under MIT; see [`LICENSE`](LICENSE).
-
 ## Timing
 
 `./hyperfine.sh` times the same nine runs with hyperfine (3 runs each, no warmup) and checks the verdict of every lemma in the last timed run. It needs `hyperfine`, a `tamarin-prover` binary and Maude, either on `PATH` or through nix. It writes into `results/hyperfine/` (or `--out DIR`); of its output only the table [`results/hyperfine/hyperfine.md`](results/hyperfine/hyperfine.md) is committed.
@@ -98,3 +96,26 @@ Measured on the laptop the paper reports: Intel Core i9-13900HX (32 threads), 64
 
 The times match the single runs in `results/SUMMARY.txt`, and every lemma gives the same verdict and step count as there.
 
+## Results tag
+
+The verdicts, step counts and times in the paper are the committed [`results/`](results/) of tag `v1.0.0`, Zenodo version TODO. Later versions change the packaging, never the results.
+
+## Cite
+
+Citation metadata is in [`CITATION.cff`](CITATION.cff). As BibTeX, with the concept DOI:
+
+```bibtex
+@software{smuk2026tamarin,
+  author    = {Smuk, Ferenc},
+  title     = {Tamarin theories and results for: Bottom-Up Formal Verification Of Temporal Constraints In Self-Orchestrated Business Processes},
+  year      = {2026},
+  version   = {v1.0.0},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.TODO},
+  url       = {https://github.com/Frigyes309/tamarin-layered-verification}
+}
+```
+
+## License
+
+MIT, see [`LICENSE`](LICENSE).
