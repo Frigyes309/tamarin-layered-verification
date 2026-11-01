@@ -15,3 +15,7 @@ wallets*
 *.pem
 *.key
 .claude/settings.local.json
+# scalability/run.sh output: only the table and the verdicts are committed
+scalability/results/*
+!scalability/results/hyperfine-*.md
+!scalability/results/verdicts-*.txt

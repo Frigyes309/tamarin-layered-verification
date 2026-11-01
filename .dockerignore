@@ -3,3 +3,7 @@ out
 results/*.proof.spthy
 results/hyperfine/logs
 results/hyperfine/proofs
+.claude
+scalability/results/logs/
+scalability/results/proofs/
+scalability/__pycache__/

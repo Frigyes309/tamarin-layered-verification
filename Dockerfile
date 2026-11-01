@@ -7,7 +7,7 @@ ARG MAUDE_VERSION=3.5.1
 ARG MAUDE_SHA256=72ed1ca87e3b3d0dfc6ee1436baf154bf04c45ff97d521bec040c5e8dfc8f92c
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl unzip git just libgmp10 libffi8 zlib1g libtinfo6 \
+    && apt-get install -y --no-install-recommends ca-certificates curl unzip git just hyperfine graphviz libgmp10 libffi8 zlib1g libtinfo6 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL -o /tmp/tamarin.tar.gz \
@@ -22,8 +22,11 @@ RUN curl -fsSL -o /tmp/tamarin.tar.gz \
     && ln -s /opt/maude/maude /usr/local/bin/maude \
     && rm /tmp/tamarin.tar.gz /tmp/maude.zip
 
-ENV MAUDE_LIB=/opt/maude LANG=C.UTF-8 OUT=/out
+# Tamarin prints Unicode symbols and fails on a non-UTF-8 stdout
+ENV MAUDE_LIB=/opt/maude LANG=C.UTF-8 LC_ALL=C.UTF-8 OUT=/out
 WORKDIR /work
 COPY . .
+# Interactive mode: --entrypoint tamarin-prover ... interactive --interface='*4' .
+EXPOSE 3001
 ENTRYPOINT ["just"]
 CMD ["reproduce"]
