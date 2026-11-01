@@ -1,6 +1,7 @@
 cff-version: 1.2.0
-title: "Tamarin theories and results for: Bottom-Up Formal Verification Of Temporal Constraints In Self-Orchestrated Business Processes"
-message: "If you use this artifact, cite this repository and the paper."
+title: "Layered verification in Tamarin: theories and results for time enforcement in self-orchestrated business processes"
+message: "If you use this artifact, cite this repository."
+version: 1.0.0
 type: software
 authors:
   - family-names: Smuk
