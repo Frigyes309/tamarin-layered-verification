@@ -3,3 +3,7 @@ results/*.proof.spthy
 # hyperfine.sh output: only the Markdown table is committed
 results/hyperfine/*
 !results/hyperfine/hyperfine.md
+# scalability/run.sh output: only the table and the verdicts are committed
+scalability/results/*
+!scalability/results/hyperfine-*.md
+!scalability/results/verdicts-*.txt

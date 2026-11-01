@@ -35,7 +35,7 @@ All 29 lemmas of the five theories are verified automatically, with no interacti
 
 ## Running
 
-The paper used Tamarin 1.12.0 and Maude 3.5.1 on Ubuntu (WSL 2).
+The paper used Tamarin 1.12.0 and Maude 3.5.1 on Ubuntu (WSL 2). Without a local installation, use the [Docker image](#docker).
 
 ```sh
 TAMARIN=$(command -v tamarin-prover) bash run_all.sh
@@ -69,4 +69,72 @@ Measured on the laptop the paper reports: Intel Core i9-13900HX (32 threads), 64
 | **Full suite** | **≈ 5 min** | |
 
 The times match the single runs in `results/SUMMARY.txt`, and every lemma gives the same verdict and step count as there.
+
+## Scalability
+
+[`scalability/`](scalability/) shows that the layer-6 proofs carry over to larger business processes (Section 5.11 of the paper). It holds BPMN models 1, 2, 3, 4 and 8 times the size of the webshop process of `L6_Presentation`, the generator that writes them and the benchmark of their proofs.
+
+**Process.** One stage is the process of `L6_Presentation`: `OrderCreated` → parallel split → `NotifyWarehouse` and an event-based gateway with the alternatives `message`, `timer` and `signal`. The model of size K chains K stages; the `message` alternative of a stage leads through a `Continue` task to the next stage. With the start event, the model has 8K nodes.
+
+**Encoding.** `Instance_Start` draws a fresh identifier for every node of a new instance and emits the structure of the process as persistent facts over these identifiers (`!Next` for a sequence flow, `!Split` for a parallel split, `!Alt` for a gateway alternative). A token is `Token(~node)`. The four rules are the same for every size; only the facts of `Instance_Start` grow with the process. Deadlines are left out, since the timing lemmas are proven in `L6_Presentation` and do not depend on the size of the process.
+
+**Lemmas.**
+
+| Lemma | Statement |
+|---|---|
+| `executable` | a token reaches the last node of the chain (exists-trace) |
+| `one_token_per_node` | a token enters every node at most once |
+| `admissible_only` | only transitions of the BPMN model take effect |
+| `gateway_exclusivity` | at every gateway exactly one alternative takes effect |
+
+`one_token_per_node` is proven by induction (`[use_induction]`). Without it the proof grows quadratically, and the 4× model does not finish within 5 minutes.
+
+**Results.** All lemmas are verified for every size. Same laptop and versions as in [Timing](#timing); mean ± σ of 3 runs.
+
+| | 1× | 2× | 3× | 4× | 8× |
+|---|---:|---:|---:|---:|---:|
+| BPMN nodes | 8 | 16 | 24 | 32 | 64 |
+| Transitions | 7 | 15 | 23 | 31 | 63 |
+| Parallel splits / gateways | 1 / 1 | 2 / 2 | 3 / 3 | 4 / 4 | 8 / 8 |
+| Tamarin rules | 4 | 4 | 4 | 4 | 4 |
+| `executable` (steps) | 8 | 13 | 18 | 23 | 43 |
+| `one_token_per_node` (steps) | 137 | 265 | 393 | 521 | 1033 |
+| `admissible_only` (steps) | 13 | 21 | 29 | 37 | 69 |
+| `gateway_exclusivity` (steps) | 60 | 114 | 168 | 222 | 438 |
+| **Wall time** | 1.4 ± 0.1 s | 9.8 ± 0.6 s | 31.5 ± 1.3 s | 75.6 ± 2.7 s | 757.5 ± 11.6 s |
+| **Peak memory** | 0.17 GiB | 0.27 GiB | 0.37 GiB | 0.48 GiB | 1.02 GiB |
+
+The number of proof steps grows exactly linearly, by the same amount per stage for every lemma. The wall time grows faster, because every step works on a larger constraint system.
+
+| File | Content |
+|---|---|
+| [`generate.py`](scalability/generate.py) | writes `L6_Scaled_x<K>.spthy`; `python scalability/generate.py [K ...]`, default K = 1 2 3 4 |
+| `L6_Scaled_x{1,2,3,4,8}.spthy` | the generated models |
+| [`run.sh`](scalability/run.sh) | times the models with hyperfine and checks every verdict; `bash scalability/run.sh [--runs N] [K ...]` |
+| [`results/`](scalability/results/) | `hyperfine-<sizes>.md` (times) and `verdicts-<sizes>.txt` (lemmas and steps) |
+
+`run.sh` limits every Tamarin run to `TIMEOUT` seconds (default 1800) and `HEAP` of memory (default `8G`).
+
+## Docker
+
+The image contains Tamarin 1.12.0, Maude 3.5.1, hyperfine and this repository, so nothing else has to be installed.
+
+```sh
+docker build -t tamarin-layered .
+
+# All theories and negative controls (run_all.sh); results land in ./results
+docker run --rm -v "$PWD/results:/work/results" tamarin-layered
+
+# Scalability benchmark, 1 run per size
+docker run --rm -v "$PWD/scalability/results:/work/scalability/results" tamarin-layered \
+  bash scalability/run.sh --runs 1
+
+# One theory
+docker run --rm tamarin-layered tamarin-prover --prove L6_Presentation.spthy
+
+# Interactive GUI at http://localhost:3001
+docker run --rm -p 3001:3001 tamarin-layered tamarin-prover interactive --interface='*4' .
+```
+
+`L5_Session` needs about 12 GiB of memory, so the memory limit of Docker (Docker Desktop: Settings → Resources) has to allow it.
 
