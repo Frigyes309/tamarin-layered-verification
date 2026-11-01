@@ -1,0 +1,5 @@
+== L6_Scaled_x8
+  executable (exists-trace): verified (43 steps)
+  one_token_per_node (all-traces): verified (1033 steps)
+  admissible_only (all-traces): verified (69 steps)
+  gateway_exclusivity (all-traces): verified (438 steps)

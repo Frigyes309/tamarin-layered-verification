@@ -18,9 +18,11 @@ smoke := "L123_Network_TWO_BYZANTINE L4_Transport L4_Transport_UNBOUND_INPUTS L6
 default:
     @just --list
 
-# Every run of the paper, then the verdict check. `just reproduce --smoke` runs only the runs under 10 s.
+# Every table and figure of both papers: the nine runs, then the scaled layer-6 models with
+# K = 1, 2, 3, 4 and 8 (one timed run each), each followed by its verdict check. About 20 minutes,
+# of which the 8x model takes 13. `just reproduce --smoke` runs the five runs under 10 s and K = 1.
 reproduce *flags:
-    case "{{flags}}" in "") OUT="{{out}}" bash run_all.sh; OUT="{{out}}" just check ;; --smoke) OUT="{{out}}" bash run_all.sh {{smoke}}; OUT="{{out}}" just check {{smoke}} ;; *) echo "usage: just reproduce [--smoke]" >&2; exit 2 ;; esac
+    case "{{flags}}" in "") OUT="{{out}}" bash run_all.sh; OUT="{{out}}" just check; OUT="{{out}}" just fig-scalability --runs 1 1 2 3 4 8 ;; --smoke) OUT="{{out}}" bash run_all.sh {{smoke}}; OUT="{{out}}" just check {{smoke}}; OUT="{{out}}" just fig-scalability --runs 1 1 ;; *) echo "usage: just reproduce [--smoke]" >&2; exit 2 ;; esac
 
 # The correctness table: base theories and the known attack.
 tab-correctness:
@@ -58,9 +60,37 @@ check *runs:
     [ "$bad" = 0 ] || exit 1
     echo "$n runs match results/"
 
-# Time the nine runs with hyperfine (needs hyperfine and Maude on PATH or through nix; see hyperfine.sh).
-timing *args:
+# The running-time table (Tamarin paper tab:lv:timing, Byzantine Clocks paper tab:app:bench): the nine
+# runs timed with hyperfine, 3 runs each (needs hyperfine and Maude on PATH or through nix; see hyperfine.sh).
+tab-timing *args:
     bash hyperfine.sh {{args}}
+
+alias timing := tab-timing
+
+# The scalability figure and table (Tamarin paper fig:lv:scale, tab:lv:scale-timing): the scaled layer-6
+# models timed with hyperfine (default 3 runs, K = 1 2 3 4), then their verdicts and proof sizes
+# compared with scalability/results/. Takes the arguments of scalability/run.sh: [--runs N] [K ...].
+fig-scalability *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export OUT="{{out}}"
+    bash scalability/run.sh {{args}}
+    set -- {{args}}
+    [ "${1:-}" = "--runs" ] && shift 2
+    sizes=("$@"); [ ${#sizes[@]} -gt 0 ] || sizes=(1 2 3 4)
+    block() { awk -v h="== L6_Scaled_x$1" '$0 == h {p = 1; print; next} /^== / {p = 0} p' "${@:2}"; }
+    bad=0
+    for k in "${sizes[@]}"; do
+      expected=$(block "$k" scalability/results/verdicts-*.txt)
+      actual=$(block "$k" "$OUT"/scalability/verdicts-*.txt)
+      if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+        echo "verdicts or proof sizes differ: L6_Scaled_x$k" >&2
+        diff <(echo "$expected") <(echo "$actual") >&2 || true
+        bad=1
+      fi
+    done
+    [ "$bad" = 0 ] || exit 1
+    echo "${#sizes[@]} scaled models match scalability/results/"
 
 # What must not reach a public repository: private links, local paths, paper sources, agent
 # commit identities and agent files in the archive. Pass --strict before the repository goes public.

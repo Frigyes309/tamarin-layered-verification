@@ -1,0 +1,20 @@
+== L6_Scaled_x1
+  executable (exists-trace): verified (8 steps)
+  one_token_per_node (all-traces): verified (137 steps)
+  admissible_only (all-traces): verified (13 steps)
+  gateway_exclusivity (all-traces): verified (60 steps)
+== L6_Scaled_x2
+  executable (exists-trace): verified (13 steps)
+  one_token_per_node (all-traces): verified (265 steps)
+  admissible_only (all-traces): verified (21 steps)
+  gateway_exclusivity (all-traces): verified (114 steps)
+== L6_Scaled_x3
+  executable (exists-trace): verified (18 steps)
+  one_token_per_node (all-traces): verified (393 steps)
+  admissible_only (all-traces): verified (29 steps)
+  gateway_exclusivity (all-traces): verified (168 steps)
+== L6_Scaled_x4
+  executable (exists-trace): verified (23 steps)
+  one_token_per_node (all-traces): verified (521 steps)
+  admissible_only (all-traces): verified (37 steps)
+  gateway_exclusivity (all-traces): verified (222 steps)

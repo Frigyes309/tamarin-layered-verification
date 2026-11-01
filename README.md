@@ -1,6 +1,6 @@
 ---
 role: code
-description: Authoritative Tamarin models and results for Ferenc Smuk's TDK 2026 paper.
+description: Tamarin models and results for Ferenc Smuk's two TDK 2026 papers.
 repository: https://github.com/Frigyes309/tamarin-layered-verification
 ---
 
@@ -8,11 +8,59 @@ repository: https://github.com/Frigyes309/tamarin-layered-verification
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.TODO.svg)](https://doi.org/10.5281/zenodo.TODO)
 
-Tamarin models for the paper **Bottom-Up Formal Verification of Temporal Constraints in Self-Orchestrated Business Processes** (Ferenc Smuk, BME VIK TDK 2026; advisors: Martin Farkas, Dr. Imre Kocsis).
+Tamarin models and results for two papers by Ferenc Smuk (BME VIK TDK 2026; advisors: Martin Farkas, Dr. Imre Kocsis): **Bottom-Up Formal Verification Of Temporal Constraints In Self-Orchestrated Business Processes**, which builds and runs the verification, and **Scalable Byzantine Fault-Tolerant Time Enforcement For Decentralized Business Collaborations**, which designs the time-enforcement system and reports what the verification establishes. Both papers rest on the same theories and runs; each has its own results map below.
 
-The paper verifies self-orchestrated BPMN collaborations, where no trusted orchestrator exists, against a combined Dolev–Yao and Byzantine coalition adversary. Instead of one large model, it splits the system into an OSI-style stack and gives each layer its own Tamarin theory. The lemmas proven on one layer become the assumptions of the layer above, which keeps each state space small. Metric deadlines are encoded as logical ordering facts over threshold-signed Verifiable Epistemic Beacons, so the untimed prover can show that no malicious party can backdate or forward-date a process event.
+The verification covers self-orchestrated BPMN collaborations, where no trusted orchestrator exists, against a combined Dolev–Yao and Byzantine coalition adversary. Instead of one large model, it splits the system into an OSI-style stack and gives each layer its own Tamarin theory. The lemmas proven on one layer become the assumptions of the layer above, which keeps each state space small. Metric deadlines are encoded as logical ordering facts over threshold-signed Verifiable Epistemic Beacons, so the untimed prover can show that no malicious party can backdate or forward-date a process event.
 
-The paper cites this repository as `tdkrepo`. Its appendix holds the proofs that go beyond Tamarin.
+The Tamarin paper cites this repository as `tdkrepo`. Its appendix holds the proofs that go beyond Tamarin.
+
+## Reproduce everything
+
+```sh
+mkdir -p out
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" ghcr.io/frigyes309/tamarin-layered-verification:v1.0.0 reproduce
+```
+
+regenerates every table and figure of both papers into `out/` in about 20 minutes, of which the 8× scaled model takes 13, and checks every lemma verdict and proof step count against the committed results. Missing summaries or different verdicts or step counts fail the check; wall-clock times are not compared. The committed models and results are never overwritten. Add `--smoke` after `reproduce` to run the five runs under 10 s and the smallest scaled model, as CI does on every push. `L5_Session` needs about 12 GiB of memory, so Docker's memory limit has to allow it.
+
+The image is published by the release workflow when a release is published. Until then, or to build it yourself:
+
+```sh
+docker build -t tamarin-layered-verification .
+mkdir -p out
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" tamarin-layered-verification reproduce
+```
+
+With the dependencies on `PATH`, `just reproduce` does the same in a clone, and `just check` repeats the comparison of the nine runs. The devcontainer builds the same Dockerfile.
+
+Dependencies, pinned in the [`Dockerfile`](Dockerfile): Ubuntu 24.04 (by digest), Tamarin 1.12.0 and Maude 3.5.1 (release binaries checked against their SHA-256), plus `just`, `hyperfine` and Graphviz from Ubuntu's archive. The theories need no other code.
+
+## Results map: Bottom-Up Formal Verification Of Temporal Constraints In Self-Orchestrated Business Processes
+
+Times are on the laptop of [Timing](#timing), for the number of runs the recipe makes. Paper labels are the LaTeX labels, since table numbers can shift between versions.
+
+| Paper | Recipe | Output | Time |
+|---|---|---|---|
+| Correctness table (`tab:correctness`) and the lemma list with step counts (`tab:lv:summary`) | `just tab-correctness` | `out/<run>.txt`, `out/SUMMARY.txt` | 5 min |
+| Robustness table (`tab:robustness`); its base-model column comes from `just tab-correctness` | `just tab-robustness` | `out/<run>.txt`, `out/SUMMARY.txt` | 1 min |
+| Running times (`tab:lv:timing`) | `just tab-timing` | `results/hyperfine/` (`--out DIR` elsewhere) | 15 min (3 runs) |
+| Scalability figure (`fig:lv:scale`) and table (`tab:lv:scale-timing`), K = 1–4 | `just fig-scalability` | `out/scalability/hyperfine-1-2-3-4.md`, `verdicts-1-2-3-4.txt` | 6 min (3 runs) |
+| The same, K = 8 | `just fig-scalability 8` | `out/scalability/hyperfine-8.md`, `verdicts-8.txt` | 38 min (3 runs) |
+
+## Results map: Scalable Byzantine Fault-Tolerant Time Enforcement For Decentralized Business Collaborations
+
+| Paper | Recipe | Output | Time |
+|---|---|---|---|
+| Correctness table (`tab:correctness`) and the lemmas per guarantee (`tab:app:lemmas`) | `just tab-correctness` | `out/<run>.txt`, `out/SUMMARY.txt` | 5 min |
+| Robustness table (`tab:robustness`), the four removals with an attack | `just tab-robustness` | `out/<run>.txt`, `out/SUMMARY.txt` | 1 min |
+| Running times (`tab:app:bench`) | `just tab-timing` | `results/hyperfine/` (`--out DIR` elsewhere) | 15 min (3 runs) |
+| Scalability section (`sec:scalability`) | none: the costs are derived analytically in the paper | | |
+
+## What does not reproduce
+
+The lemma verdicts and proof step counts reproduce exactly: `just reproduce` compares them with [`results/`](results/) and [`scalability/results/`](scalability/results/) and fails on any difference.
+
+Wall-clock times do not, because they depend on the machine and on the Tamarin and Maude builds, so the checks ignore them. The times in both papers are the hyperfine means of [Timing](#timing) and [Scalability](#scalability), three runs each on the paper's laptop. `just reproduce` times the scaled models once, so its times are single runs. The times in [`results/SUMMARY.txt`](results/SUMMARY.txt) come from an earlier single run whose Tamarin version and machine are not recorded; the papers do not use them. Expect different times on other hardware.
 
 ## Theories
 
@@ -41,9 +89,9 @@ Each control removes one defence with a `-D` flag, and Tamarin then finds an att
 
 All 29 lemmas of the five theories are verified automatically, with no interactive proof step, and all four controls find their attack trace. On the paper's laptop the whole suite takes about 5 minutes, and the longest run (L5) about 2.2 minutes (see [Timing](#timing)). The per-lemma outcomes and step counts are in [`results/SUMMARY.txt`](results/SUMMARY.txt).
 
-## Running
+## Running without Docker
 
-The paper used Tamarin 1.12.0 and Maude 3.5.1 on Ubuntu (WSL 2).
+The paper used Tamarin 1.12.0 and Maude 3.5.1 on Ubuntu (WSL 2). Without a local installation, use the [Docker image](#docker).
 
 ```sh
 TAMARIN=$(command -v tamarin-prover) bash run_all.sh
@@ -57,23 +105,7 @@ To open a single theory in the interactive GUI:
 tamarin-prover interactive L5_Session.spthy
 ```
 
-## Reproduce and check
-
-Build the runtime image locally, then reproduce all five theories and four negative controls:
-
-```sh
-docker build -t tamarin-layered-verification .
-mkdir -p out
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" tamarin-layered-verification reproduce
-```
-
-The image includes Tamarin 1.12.0, Maude 3.5.1 and `just`. It writes proofs and summaries to `out/` and checks every lemma verdict and proof size against the committed `results/`, ignoring wall-clock times. Missing summaries or different verdicts or step counts fail the check. The committed models and results are never overwritten by these recipes.
-
-Add `--smoke` after `reproduce` to run the five short cases used in CI. With the dependencies on `PATH`, `just reproduce` runs the full suite locally and `just check` repeats its comparison. `just tab-correctness` selects the five layer theories and the `NO_CAS` control; `just tab-robustness` selects all four negative controls. `just timing` invokes the existing hyperfine script and needs its additional dependencies. The devcontainer builds the same Dockerfile.
-
-`run_all.sh [RUN...]` accepts run names from its table. `TAMARIN` defaults to `tamarin-prover` on `PATH`, `TIMEOUT` to 1800 seconds, and `OUT` to `results/` when invoked directly or `out/` through `just`.
-
-Publishing a GitHub release triggers the container workflow, which publishes `ghcr.io/frigyes309/tamarin-layered-verification:<release-tag>`. Until a release image is available, use the local build above. `.zenodo.json` supplies archive metadata, but Zenodo integration and DOI assignment are separate publication steps.
+`run_all.sh [RUN...]` accepts run names from its table. `TAMARIN` defaults to `tamarin-prover` on `PATH`, `TIMEOUT` to 1800 seconds, and `OUT` to `results/` when invoked directly or `out/` through `just`. `just tab-correctness` selects the five layer theories and the `NO_CAS` control; `just tab-robustness` selects all four negative controls.
 
 ## Timing
 
@@ -96,15 +128,77 @@ Measured on the laptop the paper reports: Intel Core i9-13900HX (32 threads), 64
 
 The times match the single runs in `results/SUMMARY.txt`, and every lemma gives the same verdict and step count as there.
 
-## What does not reproduce
+## Scalability
 
-The lemma verdicts and proof step counts reproduce exactly: `just check` compares them with [`results/`](results/) and fails on any difference.
+[`scalability/`](scalability/) shows that the layer-6 proofs carry over to larger business processes (Tamarin paper, section "Scalability with the Size of the Business Process"). It holds BPMN models 1, 2, 3, 4 and 8 times the size of the webshop process of `L6_Presentation`, the generator that writes them and the benchmark of their proofs.
 
-Wall-clock times do not, because they depend on the machine and on the Tamarin and Maude builds, so `just check` ignores them. The times in the paper (48, 2, 141, 63 and 6 s for the five theories) are the single runs in [`results/SUMMARY.txt`](results/SUMMARY.txt), which does not record the Tamarin version or the machine. The hyperfine means under [Timing](#timing), on the paper's laptop with Tamarin 1.12.0 and Maude 3.5.1, are 52.6, 1.9, 134.3, 52.4 and 5.1 s. Expect different times on other hardware.
+**Process.** One stage is the process of `L6_Presentation`: `OrderCreated` → parallel split → `NotifyWarehouse` and an event-based gateway with the alternatives `message`, `timer` and `signal`. The model of size K chains K stages; the `message` alternative of a stage leads through a `Continue` task to the next stage. With the start event, the model has 8K nodes.
+
+**Encoding.** `Instance_Start` draws a fresh identifier for every node of a new instance and emits the structure of the process as persistent facts over these identifiers (`!Next` for a sequence flow, `!Split` for a parallel split, `!Alt` for a gateway alternative). A token is `Token(~node)`. The four rules are the same for every size; only the facts of `Instance_Start` grow with the process. Deadlines are left out, since the timing lemmas are proven in `L6_Presentation` and do not depend on the size of the process.
+
+**Lemmas.**
+
+| Lemma | Statement |
+|---|---|
+| `executable` | a token reaches the last node of the chain (exists-trace) |
+| `one_token_per_node` | a token enters every node at most once |
+| `admissible_only` | only transitions of the BPMN model take effect |
+| `gateway_exclusivity` | at every gateway exactly one alternative takes effect |
+
+`one_token_per_node` is proven by induction (`[use_induction]`). Without it the proof grows quadratically, and the 4× model does not finish within 5 minutes.
+
+**Results.** All lemmas are verified for every size. Same laptop and versions as in [Timing](#timing); mean ± σ of 3 runs.
+
+| | 1× | 2× | 3× | 4× | 8× |
+|---|---:|---:|---:|---:|---:|
+| BPMN nodes | 8 | 16 | 24 | 32 | 64 |
+| Transitions | 7 | 15 | 23 | 31 | 63 |
+| Parallel splits / gateways | 1 / 1 | 2 / 2 | 3 / 3 | 4 / 4 | 8 / 8 |
+| Tamarin rules | 4 | 4 | 4 | 4 | 4 |
+| `executable` (steps) | 8 | 13 | 18 | 23 | 43 |
+| `one_token_per_node` (steps) | 137 | 265 | 393 | 521 | 1033 |
+| `admissible_only` (steps) | 13 | 21 | 29 | 37 | 69 |
+| `gateway_exclusivity` (steps) | 60 | 114 | 168 | 222 | 438 |
+| **Wall time** | 1.4 ± 0.1 s | 9.8 ± 0.6 s | 31.5 ± 1.3 s | 75.6 ± 2.7 s | 757.5 ± 11.6 s |
+| **Peak memory** | 0.17 GiB | 0.27 GiB | 0.37 GiB | 0.48 GiB | 1.02 GiB |
+
+The number of proof steps grows exactly linearly, by the same amount per stage for every lemma. The wall time grows faster, because every step works on a larger constraint system.
+
+| File | Content |
+|---|---|
+| [`generate.py`](scalability/generate.py) | writes `L6_Scaled_x<K>.spthy`; `python scalability/generate.py [K ...]`, default K = 1 2 3 4 |
+| `L6_Scaled_x{1,2,3,4,8}.spthy` | the generated models |
+| [`run.sh`](scalability/run.sh) | times the models with hyperfine and checks every verdict; `bash scalability/run.sh [--runs N] [K ...]` |
+| [`results/`](scalability/results/) | `hyperfine-<sizes>.md` (times) and `verdicts-<sizes>.txt` (lemmas and steps) |
+
+`run.sh` limits every Tamarin run to `TIMEOUT` seconds (default 1800) and `HEAP` of memory (default `8G`).
+
+## Docker
+
+The image contains Tamarin 1.12.0, Maude 3.5.1, hyperfine, `just` and this repository, so nothing else has to be installed. Its entry point is `just`, so the argument names a recipe; `--entrypoint` runs anything else. Results land in the mounted `out/`.
+
+```sh
+docker build -t tamarin-layered-verification .
+mkdir -p out
+
+# All theories and negative controls (run_all.sh)
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" --entrypoint bash tamarin-layered-verification run_all.sh
+
+# Scalability benchmark, 1 run per size
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/out:/out" tamarin-layered-verification fig-scalability --runs 1
+
+# One theory
+docker run --rm --entrypoint tamarin-prover tamarin-layered-verification --prove L6_Presentation.spthy
+
+# Interactive GUI at http://localhost:3001
+docker run --rm -p 3001:3001 --entrypoint tamarin-prover tamarin-layered-verification interactive --interface='*4' .
+```
+
+`L5_Session` needs about 12 GiB of memory, so the memory limit of Docker (Docker Desktop: Settings → Resources) has to allow it.
 
 ## Results tag
 
-The verdicts, step counts and times in the paper are the committed [`results/`](results/) of tag `v1.0.0`, Zenodo version TODO. Later versions change the packaging, never the results.
+The verdicts, step counts and times in both papers are the committed [`results/`](results/) and [`scalability/results/`](scalability/results/) of tag `v1.0.0`, Zenodo version 1.0.0. Later versions change the packaging, never the results.
 
 ## Cite
 
@@ -113,7 +207,7 @@ Citation metadata is in [`CITATION.cff`](CITATION.cff). As BibTeX, with the conc
 ```bibtex
 @software{smuk2026tamarin,
   author    = {Smuk, Ferenc},
-  title     = {Tamarin theories and results for: Bottom-Up Formal Verification Of Temporal Constraints In Self-Orchestrated Business Processes},
+  title     = {Layered verification in Tamarin: theories and results for time enforcement in self-orchestrated business processes},
   year      = {2026},
   version   = {v1.0.0},
   publisher = {Zenodo},

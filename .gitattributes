@@ -7,3 +7,11 @@
 CLAUDE.md export-ignore
 AGENTS.md export-ignore
 GEMINI.md export-ignore
+
+# The scripts and theories run inside Linux and Docker, also from a Windows checkout
+*.sh       text eol=lf
+*.py       text eol=lf
+*.spthy    text eol=lf
+Dockerfile text eol=lf
+# The publication checklist is evidence for the advisors, not part of the artifact.
+PUBLISHING.md export-ignore
