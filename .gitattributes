@@ -13,3 +13,5 @@ GEMINI.md export-ignore
 *.py       text eol=lf
 *.spthy    text eol=lf
 Dockerfile text eol=lf
+# The publication checklist is evidence for the advisors, not part of the artifact.
+PUBLISHING.md export-ignore
