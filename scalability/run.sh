@@ -8,7 +8,9 @@
 # TIMEOUT (default 1800 s) limits the time and HEAP (default 8G) the memory of
 # each Tamarin run. Writes results/hyperfine-<sizes>.{json,md},
 # results/verdicts-<sizes>.txt and results/logs/<theory>.log, where <sizes> is
-# for example 1-2-3-4; only the .md and the verdicts are committed.
+# for example 1-2-3-4; only the .md and the verdicts are committed. With OUT set
+# (as `just fig-scalability` and the Docker image do), it writes into
+# $OUT/scalability/ instead and leaves the committed results alone.
 set -euo pipefail
 
 RUNS=3
@@ -16,7 +18,10 @@ if [ "${1:-}" = "--runs" ]; then RUNS="$2"; shift 2; fi
 SIZES=("$@"); [ ${#SIZES[@]} -eq 0 ] && SIZES=(1 2 3 4)
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-OUT="$HERE/results"
+OUT="${OUT:+$OUT/scalability}"
+OUT="${OUT:-$HERE/results}"
+mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"
 TAMARIN="$(command -v tamarin-prover)"
 TIMEOUT="${TIMEOUT:-1800}"
 HEAP="${HEAP:-8G}"
