@@ -79,7 +79,8 @@ state.
       `smoke` (CI runs `reproduce --smoke` through the image's `just` entry point,
       `.github/workflows/ci.yml:17`, which the gate's text match does not see).
 - [x] Every secret gitleaks ever found has been rotated: the key, token or wallet no longer
-      works or holds anything. Evidence: gitleaks found none. GITLEAKS_RESULT
+      works or holds anything. Evidence: gitleaks found none. On 2026-11-01, `gitleaks git /repo --redact` on a
+      fresh mirror clone of every branch and pull-request ref (13 commits) printed `no leaks found`.
 - [x] No link points to a same-year TDK paper. Evidence: the README names both of Ferenc's papers by
       title, because the plan makes this repository the artifact of both, and links neither.
       `git grep -n -i -E 'overleaf|TDK26|tdk\.bme|github\.com/[^/]+/(Scalable|TDK)'` finds nothing
